@@ -1134,8 +1134,16 @@
         }
         function toggleCode(btn) {
             const content = btn.closest('.code-card').querySelector('.code-content');
-            const expanded = content.classList.toggle('expanded');
-            btn.textContent = expanded ? '收起 ∧' : '展开 ∨';
+            const expanded = content.classList.contains('expanded');
+            if (!expanded) {
+                content.style.maxHeight = content.scrollHeight + 'px';
+                content.classList.add('expanded');
+                btn.textContent = '收起 ∧';
+            } else {
+                content.style.maxHeight = '';
+                content.classList.remove('expanded');
+                btn.textContent = '展开 ∨';
+            }
         }
         function autoResize(el) { el.style.height = 'auto'; el.style.height = el.scrollHeight + 'px'; }
         function stopGeneration() { if (currentAbortController) currentAbortController.abort(); isGenerating = false; toggleInputState(false); }
