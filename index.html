@@ -1,0 +1,172 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+    <title>Studio AI</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+        <script src="https://cdn.jsdelivr.net/npm/marked/marked.min.js"></script>
+        <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/highlight.js/11.8.0/styles/github.min.css">
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/highlight.js/11.8.0/highlight.min.js"></script>
+    <link href="https://fonts.googleapis.com/css2?family=Noto+Serif+SC:wght@300;600&family=Inter:wght@300;400;600&display=swap" rel="stylesheet">
+    <link rel="stylesheet" href="style.css">
+</head>
+<body>
+
+    <div id="sidebar-overlay" onclick="closeSidebar()"></div>
+
+    <div id="quick-model-panel">
+        <div class="p-4 border-b border-gray-50">
+            <input type="text" id="quick-model-search" oninput="filterQuickModels()" class="w-full bg-gray-50 border-none p-3 rounded-xl text-xs outline-none focus:ring-1 focus:ring-black" placeholder="搜索模型...">
+        </div>
+        <div id="quick-model-list" class="max-h-64 overflow-y-auto no-scrollbar p-2 space-y-1"></div>
+        <div class="p-3 text-center border-t border-gray-50">
+            <button onclick="toggleQuickModelPanel()" class="text-[10px] text-gray-400 uppercase tracking-widest">取消</button>
+        </div>
+    </div>
+
+    <aside id="sidebar" class="no-scrollbar">
+        <div class="p-8">
+            <div class="flex justify-between items-center mb-8">
+                <h1 class="serif text-2xl italic tracking-tight">Studio</h1>
+                <button onclick="closeSidebar()" class="text-gray-300 hover:text-black">
+                    <svg width="20" height="20" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><path d="M18 6L6 18M6 6l12 12"></path></svg>
+                </button>
+            </div>
+            <button onclick="createNewChat()" id="new-chat-btn" class="w-full border border-black py-3 rounded-full text-[11px] tracking-[0.2em] font-medium hover:bg-black hover:text-white transition-all">
+                开启新对话 +
+            </button>
+        </div>
+        <div id="history-list" class="flex-1 overflow-y-auto px-4 space-y-2 no-scrollbar"></div>
+        <div class="p-6 border-t border-gray-50 flex justify-between items-center">
+            <button onclick="showSetup()" class="text-[10px] tracking-widest text-gray-400 uppercase">设置</button>
+            <button onclick="clearAllData()" class="text-[10px] tracking-widest text-red-300 uppercase">清空</button>
+        </div>
+    </aside>
+
+    <main id="main-view">
+        <div id="setup-layer" class="absolute inset-0 z-[3000] bg-white flex items-center justify-center p-6 hidden">
+            <div class="max-w-sm w-full space-y-8">
+                <div class="text-center">
+                    <h2 class="serif text-4xl italic mb-2">工作空间配置</h2>
+                    <p class="text-[10px] text-gray-400 tracking-[0.3em] uppercase">请输入您的 API 信息</p>
+                </div>
+                <div class="space-y-5">
+                    <input type="text" id="base-url" class="w-full border-b border-gray-100 py-2 outline-none focus:border-black text-sm" placeholder="接口地址 (Endpoint)">
+                    <input type="password" id="api-key" class="w-full border-b border-gray-100 py-2 outline-none focus:border-black text-sm" placeholder="API 密钥 (Key)">
+                    <div class="relative pt-2">
+                        <div class="flex gap-2">
+                            <input type="text" id="model-search" oninput="filterModels()" class="flex-1 border border-gray-100 p-3 rounded-xl text-xs outline-none focus:border-black" placeholder="搜索或获取模型...">
+                            <button onclick="fetchModels()" id="fetch-btn" class="px-4 bg-black text-white rounded-xl text-[10px]">获取列表</button>
+                        </div>
+                        <div id="model-list" class="absolute w-full mt-2 bg-white border border-gray-100 rounded-xl shadow-2xl max-h-48 overflow-y-auto z-50 hidden no-scrollbar"></div>
+                    </div>
+                </div>
+                <button onclick="saveConfig()" class="w-full bg-black text-white py-5 rounded-full text-[11px] tracking-[0.2em]">保存并进入</button>
+            </div>
+        </div>
+
+        <header class="h-16 border-b border-gray-50 flex items-center justify-between px-6 flex-shrink-0">
+            <button onclick="openSidebar()" class="text-gray-400 hover:text-black flex items-center gap-2">
+                <svg width="20" height="20" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><path d="M4 6h16M4 12h16M4 18h16"></path></svg>
+                <span class="text-[10px] tracking-widest uppercase hidden md:inline">历史记录</span>
+            </button>
+            <button onclick="toggleQuickModelPanel()" id="active-model-display" class="text-[9px] tracking-[0.3em] text-gray-400 uppercase truncate px-4 hover:text-black transition-colors flex items-center gap-1">
+                未选择模型 <svg width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M6 9l6 6 6-6"></path></svg>
+            </button>
+            <div class="w-2 h-2 rounded-full bg-green-400"></div>
+        </header>
+
+        <div id="chat-window" class="no-scrollbar">
+            <div id="empty-state" class="text-center mt-32">
+                <h3 class="serif text-3xl italic text-gray-200">Studio AI</h3>
+                <p class="text-[10px] text-gray-300 uppercase tracking-[0.4em] mt-4">专注您的每一次表达</p>
+            </div>
+        </div>
+
+        <div id="attach-menu">
+            <div class="attach-item" onclick="triggerFile('image/*')">
+                <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="3" y="3" width="18" height="18" rx="2" ry="2"></rect><circle cx="8.5" cy="8.5" r="1.5"></circle><polyline points="21 15 16 10 5 21"></polyline></svg>
+                图片识别
+            </div>
+            <div class="attach-item" onclick="triggerFile('.txt,.md,.js,.py,.html,.css,.json,.ts,.java,.cpp,.c,.go')">
+                <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M13 2H6a2 2 0 00-2 2v16a2 2 0 002 2h12a2 2 0 002-2V9z"></path><polyline points="13 2 13 9 20 9"></polyline></svg>
+                导入代码/文档
+            </div>
+        </div>
+
+        <div class="input-section">
+            <div class="max-w-4xl mx-auto">
+                <div id="attachment-preview" class="no-scrollbar"></div>
+            </div>
+
+            <div class="max-w-4xl mx-auto relative flex items-end gap-2 bg-[#f8f8f6] rounded-[28px] p-2 focus-within:bg-white focus-within:shadow-2xl transition-all border border-transparent focus-within:border-gray-100">
+                <button onclick="toggleAttachMenu()" class="w-12 h-12 text-gray-400 hover:text-black flex items-center justify-center flex-shrink-0 transition-all">
+                    <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><line x1="12" y1="5" x2="12" y2="19"></line><line x1="5" y1="12" x2="19" y2="12"></line></svg>
+                </button>
+                
+                <textarea id="user-input" rows="1" class="flex-1 bg-transparent p-4 outline-none text-sm resize-none" placeholder="请输入消息..." oninput="autoResize(this)" onpaste="handlePaste(event)"></textarea>
+                
+                <button id="send-btn" onclick="handleSend()" class="w-12 h-12 bg-black text-white rounded-full flex items-center justify-center flex-shrink-0 transition-transform active:scale-90">
+                    <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M22 2L11 13M22 2l-7 20-4-9-9-4 20-7z"/></svg>
+                </button>
+                <button id="stop-btn" onclick="stopGeneration()" class="hidden w-12 h-12 bg-red-50 text-red-500 rounded-full flex items-center justify-center flex-shrink-0 transition-transform active:scale-90">
+                    <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="6" y="6" width="12" height="12"></rect></svg>
+                </button>
+            </div>
+        </div>
+    </main>
+
+    <div id="file-preview-modal" class="hidden fixed inset-0 z-[4000] bg-black/40 backdrop-blur-sm flex items-center justify-center p-4" onclick="closeFilePreview()">
+        <div class="bg-white rounded-3xl max-w-2xl w-full max-h-[85vh] flex flex-col shadow-2xl overflow-hidden transform scale-100 transition-all" onclick="event.stopPropagation()">
+            <div class="p-5 border-b border-gray-100 flex justify-between items-center bg-gray-50/50">
+                <div class="flex items-center gap-3">
+                    <span id="modal-file-icon" class="text-lg">📄</span>
+                    <h3 id="modal-file-name" class="font-medium text-sm text-gray-800 truncate max-w-[400px]">文件名</h3>
+                </div>
+                <button onclick="closeFilePreview()" class="text-gray-400 hover:text-black p-1 text-sm bg-gray-100 hover:bg-gray-200 rounded-full w-7 h-7 flex items-center justify-center transition-colors">✕</button>
+            </div>
+            <div id="modal-file-body" class="flex-1 overflow-auto p-6 text-sm no-scrollbar bg-white">
+                </div>
+        </div>
+    </div>
+
+    <input type="file" id="hidden-file-input" class="hidden" multiple onchange="processFile(this)">
+
+    <div id="html-preview-modal" class="hidden fixed inset-0 z-[5000] bg-black/50 backdrop-blur-sm flex items-center justify-center p-3">
+        <div class="bg-white rounded-3xl w-full max-w-3xl flex flex-col shadow-2xl overflow-hidden relative" style="height:88vh">
+            <!-- 顶部工具栏容器 -->
+            <div class="px-4 py-3 border-b border-gray-100 flex items-center gap-3 bg-gray-50/60 flex-shrink-0 relative h-auto min-h-[60px] flex-wrap">
+                <div class="w-6 h-6 rounded-md bg-gray-100 flex items-center justify-center text-gray-400 flex-shrink-0">
+                    <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="4" width="18" height="16" rx="2"/><line x1="3" y1="9" x2="21" y2="9"/><circle cx="6.5" cy="6.5" r="0.6" fill="currentColor" stroke="none"/><circle cx="9" cy="6.5" r="0.6" fill="currentColor" stroke="none"/></svg>
+                </div>
+                <span class="text-sm font-medium flex-grow truncate mr-auto" id="html-preview-title">新文档</span>
+                
+                <!-- 工具按钮组 -->
+                <div class="flex items-center gap-1.5 flex-shrink-0 py-1">
+                    <button onclick="switchHtmlTab('preview')" id="html-tab-preview" class="px-3 py-1.5 rounded-lg text-[11px] font-medium bg-black text-white">预览</button>
+                    <button onclick="switchHtmlTab('code')" id="html-tab-code" class="px-3 py-1.5 rounded-lg text-[11px] font-medium text-gray-500 hover:bg-gray-100">代码</button>
+                    <div class="w-px h-4 bg-gray-200 mx-0.5"></div>
+                    <button onclick="copyHtmlArtifact()" id="html-copy-btn" class="px-3 py-1.5 rounded-lg text-[11px] text-gray-500 hover:bg-gray-100 flex items-center gap-1">
+                        <svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="9" y="9" width="13" height="13" rx="2" ry="2"></rect><path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1"></path></svg>
+                        复制代码
+                    </button>
+                    <button onclick="window.open(_htmlBlobUrl,'_blank')" class="px-3 py-1.5 rounded-lg text-[11px] text-gray-500 hover:bg-gray-100">新标签</button>
+                </div>
+
+                <!-- 绝对定位的退出按钮 -->
+                <button onclick="closeHtmlPreview()" class="absolute top-3 right-4 w-8 h-8 rounded-full bg-gray-200/50 hover:bg-gray-300 flex items-center justify-center text-gray-600 hover:text-black text-sm z-10 transition-all">✕</button>
+            </div>
+            
+            <div id="html-pane-preview" class="flex-1 overflow-hidden">
+                <iframe id="html-iframe" class="w-full h-full border-none" sandbox="allow-scripts allow-modals allow-forms allow-popups allow-same-origin"></iframe>
+            </div>
+            <div id="html-pane-code" class="hidden flex-1 overflow-auto p-4 bg-[#f9f9f7]">
+                <pre id="html-code-view" class="font-mono text-xs text-gray-800 whitespace-pre-wrap break-all leading-relaxed m-0"></pre>
+            </div>
+        </div>
+    </div>
+
+    <script src="script.js"></script>
+</body>
+</html>

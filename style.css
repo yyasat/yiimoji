@@ -1,0 +1,258 @@
+        :root { --bg: #fcfcf9; --accent: #1a1a1a; }
+        body { font-family: 'Inter', 'PingFang SC', sans-serif; background: var(--bg); color: var(--accent); margin: 0; overflow: hidden; }
+        .serif { font-family: 'Noto Serif SC', serif; }
+        
+        #sidebar { position: fixed; left: 0; top: 0; bottom: 0; width: 280px; background: #f9f9f7; z-index: 2000; transform: translateX(-100%); transition: transform 0.3s cubic-bezier(0.4, 0, 0.2, 1); border-right: 1px solid #f0f0f0; display: flex !important; flex-direction: column; }
+        #sidebar.open { transform: translateX(0) !important; }
+        #sidebar-overlay { position: fixed; inset: 0; background: rgba(0,0,0,0.05); z-index: 1500; display: none; opacity: 0; transition: opacity 0.3s ease; }
+        #sidebar-overlay.show { display: block !important; opacity: 1; }
+
+        #main-view { height: 100vh; height: 100dvh; display: flex; flex-direction: column; background: white; position: relative; }
+        #chat-window { flex: 1; overflow-y: auto; padding: 2rem; scroll-behavior: smooth; }
+        .input-section { padding: 1.5rem; background: white; border-top: 1px solid #fcfcfc; }
+
+        @media (max-width: 768px) { #sidebar { width: 85%; } #chat-window { padding: 1rem; } }
+
+        .user-msg { 
+            background: #f0f0eb; 
+            border-radius: 18px 18px 4px 18px; 
+            padding: 1rem; 
+            margin-left: auto; 
+            max-width: 85%; 
+            position: relative; 
+            cursor: pointer;
+            white-space: pre-wrap;
+            word-break: break-word;
+        }
+                .ai-msg { border: 1px solid #f0f0f0; border-radius: 18px 18px 18px 4px; padding: 1rem; margin-right: auto; max-width: 85%; background: white; min-width: 0; }
+        
+        /* 附件面板动画 */
+        #attach-menu { position: absolute; bottom: 80px; left: 20px; background: white; border: 1px solid #f0f0f0; border-radius: 20px; box-shadow: 0 10px 30px rgba(0,0,0,0.08); display: none; flex-direction: column; overflow: hidden; z-index: 100; min-width: 140px; }
+        #attach-menu.show { display: flex; animation: popUp 0.2s ease; }
+        @keyframes popUp { from { opacity: 0; transform: translateY(10px); } to { opacity: 1; transform: translateY(0); } }
+
+        .attach-item { padding: 12px 20px; font-size: 12px; display: flex; align-items: center; gap: 10px; cursor: pointer; transition: background 0.2s; }
+        .attach-item:hover { background: #f9f9f7; }
+
+        /* 附件预览区域 */
+        #attachment-preview { 
+            display: flex; 
+            gap: 10px; 
+            padding: 8px 12px; 
+            overflow-x: auto; 
+            white-space: nowrap;
+            scroll-behavior: smooth;
+            -webkit-overflow-scrolling: touch;
+        }
+        #attachment-preview::-webkit-scrollbar { display: none; }
+        
+        .file-card-preview {
+            background: #ffffff;
+            border: 1px solid #e5e7eb;
+            border-radius: 12px;
+            padding: 10px 14px;
+            display: flex;
+            align-items: center;
+            gap: 12px;
+            box-shadow: 0 4px 12px rgba(0,0,0,0.03);
+            cursor: pointer;
+            transition: all 0.2s;
+            width: 190px;
+            flex-shrink: 0;
+            position: relative;
+            user-select: none;
+        }
+        .file-card-preview:hover {
+            border-color: #9ca3af;
+            box-shadow: 0 6px 16px rgba(0,0,0,0.06);
+        }
+
+.code-card { border: 1px solid #e5e7eb; border-radius: 14px; margin: 1rem 0; background: #fff; overflow: hidden; box-shadow: 0 2px 8px rgba(0,0,0,0.04); width: 100%; max-width: 100%; box-sizing: border-box; }
+        .code-header { background: #f3f4f6; padding: 8px 16px; border-bottom: 1px solid #e5e7eb; display: flex; justify-content: space-between; align-items: center; font-size: 11px; color: #6b7280; }
+        .code-body { position: relative; }
+                .code-content { padding: 16px; overflow-x: hidden; overflow-y: hidden; font-family: monospace; font-size: 13px; background: #fafafa; max-height: 180px; transition: max-height 0.35s cubic-bezier(0.4,0,0.2,1); }
+        .code-content.expanded { max-height: 3000px; }
+        .code-mask { position: absolute; bottom: 0; left: 0; right: 0; height: 48px; background: linear-gradient(to top, #fafafa 40%, transparent); pointer-events: none; transition: opacity 0.3s; }
+        .hljs { background: transparent !important; padding: 0 !important; }
+        .code-content.expanded ~ .code-mask { opacity: 0; }
+        .code-toggle { width: 100%; padding: 7px 0; text-align: center; font-size: 11px; color: #9ca3af; background: #f9fafb; border-top: 1px solid #e5e7eb; cursor: pointer; user-select: none; letter-spacing: 0.08em; transition: background 0.15s, color 0.15s; }
+        .code-toggle:hover { background: #f3f4f6; color: #4b5563; }
+        .code-content pre { margin: 0; max-width: 100%; }
+        .code-content code { white-space: pre !important; overflow-x: auto; display: block; }
+
+        #quick-model-panel { position: fixed; top: 70px; left: 50%; transform: translateX(-50%); width: 90%; max-width: 400px; background: white; border: 1px solid #f0f0f0; border-radius: 24px; box-shadow: 0 20px 50px rgba(0,0,0,0.1); z-index: 2500; display: none; flex-direction: column; overflow: hidden; }
+        #quick-model-panel.show { display: flex !important; animation: slideDown 0.3s ease; }
+
+        .no-scrollbar::-webkit-scrollbar { display: none; }
+        .hidden { display: none !important; }
+
+        /* AI 长消息折叠设计 */
+        .content-limiter {
+            position: relative;
+            overflow: hidden;
+            transition: max-height 0.4s cubic-bezier(0.25, 0.8, 0.25, 1);
+        }
+        .content-limiter.collapsed {
+            max-height: 400px; 
+        }
+        .collapse-mask {
+            position: absolute;
+            bottom: 0; left: 0; right: 0; height: 80px;
+            background: linear-gradient(to top, white 20%, transparent);
+            pointer-events: none;
+            opacity: 0;
+            transition: opacity 0.3s ease;
+        }
+        .content-limiter.collapsed .collapse-mask {
+            opacity: 1;
+        }
+        .toggle-fold-btn {
+            display: none;
+            margin-top: 12px;
+            color: #2563eb;
+            font-size: 12px;
+            cursor: pointer;
+            text-align: center;
+            font-weight: 500;
+            user-select: none;
+            letter-spacing: 0.1em;
+        }
+        .toggle-fold-btn.visible {
+            display: block;
+        }
+        
+        /* 快捷建议选项胶囊 */
+        .suggestion-chips { display: flex; flex-wrap: wrap; gap: 8px; margin-top: 14px; padding-top: 12px; border-top: 1px dashed #f0f0f0; }
+        .suggestion-chip { background: #f8f8f6; border: 1px solid #e5e5e0; border-radius: 20px; padding: 6px 14px; font-size: 11px; color: #555; cursor: pointer; transition: all 0.2s cubic-bezier(0.4,0,0.2,1); user-select: none; }
+        .suggestion-chip:hover { background: #1a1a1a; color: white; border-color: #1a1a1a; transform: translateY(-1px); box-shadow: 0 4px 12px rgba(0,0,0,0.12); }
+        .suggestion-chip:active { transform: translateY(0); }
+
+        /* 精致 Markdown 排版 */
+        .markdown-content h1,.markdown-content h2,.markdown-content h3,.markdown-content h4 { font-weight: 600; line-height: 1.3; margin: 1em 0 0.4em; color: #111; }
+        .markdown-content h1 { font-size: 1.35em; border-bottom: 1px solid #f0f0f0; padding-bottom: 0.4em; }
+        .markdown-content h2 { font-size: 1.15em; }
+        .markdown-content h3 { font-size: 1em; color: #333; }
+        .markdown-content p { margin: 0.5em 0; line-height: 1.8; }
+        .markdown-content ul { padding-left: 1.4em; margin: 6px 0; list-style: disc; }
+        .markdown-content ol { padding-left: 1.6em; margin: 6px 0; }
+        .markdown-content li { margin: 3px 0; line-height: 1.7; }
+        .markdown-content strong { color: #111; font-weight: 600; }
+        .markdown-content em { color: #555; }
+        .markdown-content blockquote { border-left: 3px solid #d1d5db; padding: 8px 14px; margin: 10px 0; background: #f9f9f7; border-radius: 0 8px 8px 0; color: #6b7280; font-style: italic; font-size: 0.92em; }
+        .markdown-content table { width: 100%; border-collapse: collapse; margin: 12px 0; font-size: 12px; border-radius: 8px; overflow: hidden; border: 1px solid #e5e7eb; }
+        .markdown-content th { background: #f3f4f6; padding: 8px 12px; text-align: left; font-weight: 600; font-size: 11px; letter-spacing: 0.05em; border-bottom: 1px solid #e5e7eb; }
+        .markdown-content td { padding: 7px 12px; border-bottom: 1px solid #f3f4f6; vertical-align: top; }
+        .markdown-content tr:last-child td { border-bottom: none; }
+        .markdown-content tr:nth-child(even) td { background: #fafafa; }
+        .markdown-content hr { border: none; border-top: 1px solid #f0f0f0; margin: 16px 0; }
+        .markdown-content a { color: #2563eb; text-decoration: none; border-bottom: 1px solid transparent; transition: border-color 0.2s; }
+        .markdown-content a:hover { border-bottom-color: #2563eb; }
+        .markdown-content code:not([class]) { background: #f3f4f6; padding: 1px 6px; border-radius: 4px; font-size: 0.85em; font-family: monospace; color: #d97706; }
+
+        /* HTML Artifact 卡片 */
+        .artifact-card { display: flex; align-items: center; gap: 14px; background: #f8f8f6; border: 1px solid #e8e8e4; border-radius: 16px; padding: 14px 16px; margin: 10px 0; cursor: pointer; transition: all 0.2s; user-select: none; position: relative; }
+        .artifact-card:hover { border-color: #c8c8c0; box-shadow: 0 4px 16px rgba(0,0,0,0.06); }
+        .artifact-icon { width: 42px; height: 50px; background: white; border: 1px solid #e8e8e4; border-radius: 8px; display: flex; align-items: center; justify-content: center; color: #9ca3af; flex-shrink: 0; transform: rotate(-4deg); box-shadow: 2px 3px 8px rgba(0,0,0,0.07); }
+        .artifact-info { flex: 1; min-width: 0; }
+        .artifact-title { font-size: 13px; font-weight: 500; color: #1a1a1a; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+        .artifact-meta { font-size: 11px; color: #9ca3af; margin-top: 3px; }
+        .artifact-dl { background: white; border: 1px solid #e0e0da; border-radius: 10px; padding: 8px 16px; font-size: 12px; color: #333; cursor: pointer; flex-shrink: 0; transition: all 0.2s; }
+        .artifact-dl:hover { background: #f0f0eb; }
+
+        /* Artifact 加载圆圈 - 改为更平滑的动画 */
+        .artifact-spinner {
+            width: 18px; height: 18px; border: 2px solid #e5e7eb; border-top-color: #1a1a1a; border-radius: 50%;
+            animation: art-spin 1s linear infinite;
+            display: none;
+            margin-right: 10px;
+            flex-shrink: 0;
+        }
+        @keyframes art-spin { to { transform: rotate(360deg); } }
+
+        /* 流式加载指示器 - 独立于 markdown 内容，不会被 innerHTML 覆盖 */
+        .stream-artifact-indicator {
+            display: flex;
+            align-items: center;
+            gap: 14px;
+            background: #f8f8f6;
+            border: 1px solid #e8e8e4;
+            border-radius: 16px;
+            padding: 14px 16px;
+            margin: 10px 0;
+            user-select: none;
+        }
+        .stream-artifact-indicator .artifact-icon {
+            width: 42px; height: 50px; background: white; border: 1px solid #e8e8e4; border-radius: 8px;
+            display: flex; align-items: center; justify-content: center; font-size: 12px; color: #9ca3af;
+            flex-shrink: 0; transform: rotate(-4deg); box-shadow: 2px 3px 8px rgba(0,0,0,0.07);
+            font-family: monospace; font-weight: 700; letter-spacing: -1px;
+        }
+        .stream-artifact-indicator .artifact-info { flex: 1; min-width: 0; }
+        .stream-artifact-indicator .artifact-title { font-size: 13px; font-weight: 500; color: #1a1a1a; }
+        .stream-artifact-indicator .artifact-meta { font-size: 11px; color: #9ca3af; margin-top: 3px; }
+        .stream-artifact-indicator .indicator-spinner {
+            width: 18px; height: 18px;
+            border: 2px solid #e5e7eb;
+            border-top-color: #1a1a1a;
+            border-radius: 50%;
+            animation: art-spin 1s linear infinite;
+            flex-shrink: 0;
+        }
+
+        /* 思考动画 */
+        .thinking-indicator {
+            display: flex;
+            align-items: center;
+            gap: 12px;
+            padding: 6px 0;
+        }
+        .thinking-dots {
+            display: flex;
+            align-items: center;
+            gap: 4px;
+        }
+        .thinking-dots span {
+            width: 5px;
+            height: 5px;
+            border-radius: 50%;
+            background: #c9c9c4;
+            animation: thinkingPulse 1.4s ease-in-out infinite;
+        }
+        .thinking-dots span:nth-child(2) { animation-delay: 0.2s; }
+        .thinking-dots span:nth-child(3) { animation-delay: 0.4s; }
+        @keyframes thinkingPulse {
+            0%, 100% { opacity: 0.3; transform: scale(0.85); }
+            50% { opacity: 1; transform: scale(1.1); }
+        }
+        .thinking-text {
+            font-size: 12px;
+            color: #b0b0a8;
+            letter-spacing: 0.06em;
+            font-weight: 400;
+        }
+
+        /* 流式输出光标动画 */
+        .streaming-cursor {
+            display: inline-block;
+            width: 2px;
+            height: 1em;
+            background: #1a1a1a;
+            margin-left: 2px;
+            vertical-align: text-bottom;
+            animation: cursorBlink 0.8s ease-in-out infinite;
+        }
+        @keyframes cursorBlink {
+            0%, 100% { opacity: 1; }
+            50% { opacity: 0; }
+        }
+        /* 流式光标：仅对非 artifact-card 的最后一个子元素显示 */
+        .streaming .markdown-content > *:last-child:not(.artifact-card)::after {
+            content: '';
+            display: inline-block;
+            width: 2px;
+            height: 0.9em;
+            background: #1a1a1a;
+            margin-left: 3px;
+            vertical-align: text-bottom;
+            animation: cursorBlink 0.8s ease-in-out infinite;
+        }
