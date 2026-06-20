@@ -421,27 +421,6 @@
             }
         }
 
-        function toggleFold(btn) {
-            const limiter = btn.previousElementSibling;
-            if (limiter.classList.contains('collapsed')) {
-                limiter.classList.remove('collapsed');
-                limiter.style.maxHeight = limiter.scrollHeight + 'px';
-                btn.innerText = '收起 ∧';
-                setTimeout(() => {
-                    if (!limiter.classList.contains('collapsed')) {
-                        limiter.style.maxHeight = 'none';
-                    }
-                }, 400);
-            } else {
-                limiter.style.maxHeight = limiter.scrollHeight + 'px';
-                limiter.offsetHeight; 
-                limiter.classList.add('collapsed');
-                limiter.style.maxHeight = '';
-                btn.innerText = '展开全文 ∨';
-                limiter.scrollIntoView({ behavior: 'smooth', block: 'nearest' });
-            }
-        }
-
         function getThinkingHTML() {
             return `<div class="thinking-indicator">
                 <div class="thinking-dots"><span></span><span></span><span></span></div>
@@ -841,11 +820,7 @@
                 }
             } else {
                 bubble.innerHTML = `
-                    <div class="content-limiter collapsed">
-                        <div class="markdown-content"></div>
-                        <div class="collapse-mask"></div>
-                    </div>
-                    <div class="toggle-fold-btn" onclick="toggleFold(this)">展开全文 ∨</div>
+                    <div class="markdown-content"></div>
                     <div class="flex justify-end mt-2 pt-2 border-t border-gray-100 text-[10px] text-gray-400">
                         <button onclick="regenerateMessage(${idx}, event)" class="hover:text-black flex items-center gap-1 transition-colors">
                             <svg class="w-3.5 h-3.5" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><path d="M21.5 2v6h-6M21.34 15.57a10 10 0 1 1-.57-8.38l5.67-5.67"/></svg>
@@ -857,27 +832,6 @@
                 wrap.appendChild(bubble);
                 const mdContainer = bubble.querySelector('.markdown-content');
                 mdContainer.innerHTML = marked.parse(preprocessMarkdown(content));
-
-                bubble.addEventListener('click', (e) => {
-                    if (e.detail === 3) {
-                        const limiter = bubble.querySelector('.content-limiter');
-                        if (limiter.classList.contains('collapsed')) {
-                            limiter.classList.remove('collapsed');
-                            limiter.style.maxHeight = 'none';
-                        } else {
-                            limiter.classList.add('collapsed');
-                            limiter.style.maxHeight = '400px';
-                        }
-                    }
-                });
-
-                setTimeout(() => {
-                    const limiter = bubble.querySelector('.content-limiter');
-                    const toggleBtn = bubble.querySelector('.toggle-fold-btn');
-                    if (limiter && limiter.scrollHeight > 400) {
-                        toggleBtn.classList.add('visible');
-                    }
-                }, 100);
             }
             win.appendChild(wrap);
             win.scrollTop = win.scrollHeight;
