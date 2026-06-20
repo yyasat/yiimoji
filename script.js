@@ -1,4 +1,4 @@
-        // 使用 IndexedDB 实现无限制存储
+// 使用 IndexedDB 实现无限制存储
         const db = {
             name: 'StudioAI_DB',
             store: 'chat_sessions',
@@ -138,6 +138,9 @@
         function preprocessMarkdown(text) {
             if (!text) return text;
 
+            // 【新增】：重置卡片缓存，防止内存污染
+            window.editCardHTMLs = {};
+
             // 解析 <ai_edit_file> 标签：按文件名分组，同一文件的多处修改合并为一张卡片
             // 整体包一层 try/catch：万一这部分解析出错，也不能影响后面正文/代码块正常显示
             try {
@@ -176,12 +179,16 @@
                     let codeBlocksHTML = '';
                     let totalLines = 0;
                     edits.forEach((e, i) => {
-                        window.rawCodeBlocks[id + '-s' + i] = e.search;
-                        window.rawCodeBlocks[id + '-r' + i] = e.replace;
-                        totalLines += e.search.split('\n').length;
+                        // 【核心修复 1】：剥离 AI 错误输出在内部的 ```css 这种 Markdown 围栏标记
+                        let sText = e.search.replace(/^\s*```[a-zA-Z0-9_+-]*\s*\n?/g, '').replace(/\n?\s*```\s*$/g, '');
+                        let rText = e.replace(/^\s*```[a-zA-Z0-9_+-]*\s*\n?/g, '').replace(/\n?\s*```\s*$/g, '');
+
+                        window.rawCodeBlocks[id + '-s' + i] = sText;
+                        window.rawCodeBlocks[id + '-r' + i] = rText;
+                        totalLines += sText.split('\n').length;
                         const stepLabel = edits.length > 1 ? `第 ${i + 1}/${edits.length} 处 · ` : '';
-                        codeBlocksHTML += `<div class="edit-code-block"><div class="edit-code-label"><span>${stepLabel}原代码</span><button onclick="copyCode('${id}-s${i}')">复制</button></div><pre class="edit-code-pre"><code>${esc(e.search)}</code></pre></div>`;
-                        codeBlocksHTML += `<div class="edit-code-block"><div class="edit-code-label"><span>${stepLabel}新代码</span><button onclick="copyCode('${id}-r${i}')">复制</button></div><pre class="edit-code-pre"><code>${esc(e.replace)}</code></pre></div>`;
+                        codeBlocksHTML += `<div class="edit-code-block"><div class="edit-code-label"><span>${stepLabel}原代码</span><button onclick="copyCode('${id}-s${i}')">复制</button></div><pre class="edit-code-pre"><code>${esc(sText)}</code></pre></div>`;
+                        codeBlocksHTML += `<div class="edit-code-block"><div class="edit-code-label"><span>${stepLabel}新代码</span><button onclick="copyCode('${id}-r${i}')">复制</button></div><pre class="edit-code-pre"><code>${esc(rText)}</code></pre></div>`;
                     });
 
                     const metaText = edits.length > 1 ? `代码修改 · 共 ${edits.length} 处 · ${totalLines} 行` : `代码修改 · ${totalLines} 行`;
@@ -196,7 +203,9 @@
                         <div class="edit-card-code" id="${id}-code">${codeBlocksHTML}</div>
                     </div>`;
 
-                    text = text.replace(placeholders[filename], cardHTML);
+                    // 【核心修复 2】：不要直接把 HTML 丢进 text，而是替换成一个安全的 div 占位符
+                    window.editCardHTMLs[id] = cardHTML;
+                    text = text.replace(placeholders[filename], `\n\n<div id="placeholder-${id}"></div>\n\n`);
                 });
             } catch (e) {
                 console.warn('ai_edit_file 卡片解析出错（已跳过，不影响其余内容显示）:', e);
@@ -226,6 +235,20 @@
             breaks: true,
             gfm: true
         });
+
+        // 【核心修复 3】：挂载拦截器，在 Markdown 彻底渲染完文本之后，再把刚才的占位符换回原生的 UI 卡片
+        // 这样可以 100% 避免普通代码块卡片在“应用修改”卡片内出现“套娃”
+        const _originalMarkedParse = marked.parse;
+        marked.parse = function(src, options) {
+            let html = _originalMarkedParse.call(marked, src, options);
+            if (window.editCardHTMLs) {
+                for (let id in window.editCardHTMLs) {
+                    const placeholderRegex = new RegExp(`<p>\\s*<div id="placeholder-${id}"><\\/div>\\s*<\\/p>|<div id="placeholder-${id}"><\\/div>`, 'g');
+                    html = html.replace(placeholderRegex, window.editCardHTMLs[id]);
+                }
+            }
+            return html;
+        };
 
         // 智能提取 HTML 卡片标题：title 标签 > h1 标签 > 当前对话标题 > 新文档
         function extractHtmlTitle(code) {
