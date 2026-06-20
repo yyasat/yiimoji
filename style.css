@@ -256,3 +256,22 @@
             vertical-align: text-bottom;
             animation: cursorBlink 0.8s ease-in-out infinite;
         }
+
+        /* ai_edit_file 修改卡片 */
+        .edit-card { display: flex; flex-direction: column; gap: 10px; background: #f4f7ff; border: 1px solid #d0dbf5; border-radius: 14px; padding: 14px 16px; margin: 10px 0; }
+        .edit-card-header { display: flex; align-items: center; gap: 12px; }
+        .edit-card-icon { font-size: 18px; flex-shrink: 0; line-height: 1; }
+        .edit-card-info { flex: 1; min-width: 0; }
+        .edit-card-title { font-size: 13px; font-weight: 600; color: #1a1a1a; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+        .edit-card-meta { font-size: 11px; color: #8a9bbf; margin-top: 2px; }
+        .edit-card-status { font-size: 11px; white-space: nowrap; flex-shrink: 0; }
+        .edit-status-ok { color: #16a34a; font-weight: 500; }
+        .edit-status-fail { color: #dc2626; font-weight: 500; }
+        .edit-card-actions { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; }
+        .edit-apply-btn { background: #1a1a1a; color: white; border: none; border-radius: 20px; padding: 7px 18px; font-size: 12px; cursor: pointer; transition: background 0.15s; letter-spacing: 0.04em; }
+        .edit-apply-btn:hover { background: #333; }
+        .edit-retry-hint { font-size: 11px; color: #6b7280; }
+        .edit-retry-btn { background: white; color: #1a1a1a; border: 1px solid #d1d5db; border-radius: 20px; padding: 6px 14px; font-size: 12px; cursor: pointer; transition: all 0.15s; }
+        .edit-retry-btn:hover { border-color: #1a1a1a; background: #f9f9f7; }
+        .edit-dismiss-btn { background: transparent; color: #9ca3af; border: none; padding: 6px 10px; font-size: 12px; cursor: pointer; transition: color 0.15s; }
+        .edit-dismiss-btn:hover { color: #374151; }
