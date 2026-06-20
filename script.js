@@ -137,7 +137,7 @@
                 window.editCards[id] = { filename, search: searchText, replace: replaceText };
                 const lineCount = searchText.split('\n').length;
                 const safeFilename = filename.replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;');
-                return `\n<div class="edit-card" id="${id}"><div class="edit-card-header"><div class="edit-card-icon">✏️</div><div class="edit-card-info"><div class="edit-card-title">${safeFilename}</div><div class="edit-card-meta">代码修改 · ${lineCount} 行</div></div><span class="edit-card-status" id="${id}-status"></span></div><div class="edit-card-actions" id="${id}-actions"><button class="edit-apply-btn" onclick="applyEdit('${id}')">应用修改</button></div></div>\n`;
+                return `\n\n<div class="edit-card" id="${id}"><div class="edit-card-header"><div class="edit-card-icon">✏️</div><div class="edit-card-info"><div class="edit-card-title">${safeFilename}</div><div class="edit-card-meta">代码修改 · ${lineCount} 行</div></div><span class="edit-card-status" id="${id}-status"></span></div><div class="edit-card-actions" id="${id}-actions"><button class="edit-apply-btn" onclick="applyEdit('${id}')">应用修改</button></div></div>\n\n`;
             });
 
             // 匹配 <file_write file="xxx.html" ...>...</file_write> 格式
