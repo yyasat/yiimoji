@@ -862,13 +862,12 @@
                 const raw = (data.choices?.[0]?.message?.content || '').trim().replace(/```json|```/g, '').trim();
                 const suggestions = JSON.parse(raw);
                 if (Array.isArray(suggestions) && suggestions.length > 0) {
-                    const limiter = bubble.querySelector('.content-limiter');
                     const chips = document.createElement('div');
                     chips.className = 'suggestion-chips';
                     chips.innerHTML = suggestions.map(s =>
                         `<button class="suggestion-chip" onclick="useSuggestion(this)">${s}</button>`
                     ).join('');
-                    limiter.appendChild(chips);
+                    bubble.appendChild(chips);
                 }
             } catch(e) { /* 静默失败 */ }
         }
