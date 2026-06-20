@@ -1203,6 +1203,19 @@
         }
 
         // --- ai_edit_file 验证与应用 ---
+
+        // 把 search 文本转成"空白容错"的正则：内容必须一致，但空格/Tab/换行数量不要求完全相等
+        // 这样能解决 AI 复述代码时空格、缩进经常对不齐、但内容其实没错的"假性不匹配"
+        function _buildFuzzyMatcher(search) {
+            const escaped = search.replace(/[.*+?^${}()|[\]\\]/g, '\\$&'); // 转义正则特殊字符
+            const flexible = escaped.replace(/\s+/g, '\\s+'); // 任意连续空白 → 可伸缩匹配
+            try {
+                return new RegExp(flexible);
+            } catch (e) {
+                return null;
+            }
+        }
+
         function applyEdit(id) {
             const edit = (window.editCards || {})[id];
             if (!edit) { alert('修改数据丢失，请重新生成。'); return; }
@@ -1216,12 +1229,28 @@
 
             // 依次模拟应用每一处修改：全部能匹配上才正式写入，避免只改一半
             let working = content;
+            let usedFuzzy = false;
             for (let i = 0; i < edits.length; i++) {
-                if (!working.includes(edits[i].search)) {
-                    _setEditStatus(id, 'mismatch', null, i + 1, edits.length);
-                    return;
+                const search = edits[i].search;
+                const replace = edits[i].replace;
+
+                if (working.includes(search)) {
+                    // 精确匹配：直接替换（用函数形式返回，避免 replace 文本里万一含 $ 符号被误解析）
+                    working = working.replace(search, () => replace);
+                    continue;
                 }
-                working = working.replace(edits[i].search, edits[i].replace);
+
+                // 精确匹配失败，尝试空白容错匹配
+                const regex = _buildFuzzyMatcher(search);
+                if (regex && regex.test(working)) {
+                    working = working.replace(regex, () => replace);
+                    usedFuzzy = true;
+                    continue;
+                }
+
+                // 两种方式都找不到，才算真正不匹配
+                _setEditStatus(id, 'mismatch', null, i + 1, edits.length);
+                return;
             }
 
             // 全部验证通过，正式写入并下载
@@ -1232,7 +1261,7 @@
             const a = document.createElement('a');
             a.href = url; a.download = filename; a.click();
             URL.revokeObjectURL(url);
-            _setEditStatus(id, 'success', null);
+            _setEditStatus(id, 'success', null, null, null, usedFuzzy);
         }
 
         // "查看代码"按钮永远保留在操作区，无论应用成功/失败，用户都能随时看到并复制原代码/新代码
@@ -1240,11 +1269,11 @@
             return `<button class="edit-view-btn" onclick="toggleEditView('${id}')" id="${id}-viewbtn">查看代码</button>`;
         }
 
-        function _setEditStatus(id, status, msg, step, total) {
+        function _setEditStatus(id, status, msg, step, total, usedFuzzy) {
             const statusEl = document.getElementById(id + '-status');
             const actionsEl = document.getElementById(id + '-actions');
             if (status === 'success') {
-                if (statusEl) { statusEl.textContent = '✓ 已应用并下载'; statusEl.className = 'edit-card-status edit-status-ok'; }
+                if (statusEl) { statusEl.textContent = usedFuzzy ? '✓ 已应用（智能匹配）' : '✓ 已应用并下载'; statusEl.className = 'edit-card-status edit-status-ok'; }
                 if (actionsEl) actionsEl.innerHTML = _viewBtnHTML(id);
             } else if (status === 'mismatch') {
                 const stepText = (step && total) ? `第 ${step}/${total} 处` : '';
