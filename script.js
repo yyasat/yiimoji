@@ -139,63 +139,68 @@
             if (!text) return text;
 
             // 解析 <ai_edit_file> 标签：按文件名分组，同一文件的多处修改合并为一张卡片
-            const editGroups = {};   // filename -> [{search, replace}, ...]
-            const groupOrder = [];   // 文件名出现顺序（去重）
-            const placeholders = {}; // filename -> 占位符 token（只在第一次出现处插入）
+            // 整体包一层 try/catch：万一这部分解析出错，也不能影响后面正文/代码块正常显示
+            try {
+                const editGroups = {};   // filename -> [{search, replace}, ...]
+                const groupOrder = [];   // 文件名出现顺序（去重）
+                const placeholders = {}; // filename -> 占位符 token（只在第一次出现处插入）
 
-            text = text.replace(/<ai_edit_file\s+filename="([^"]*)"[^>]*>([\s\S]*?)<\/ai_edit_file>/gi, function(match, filename, body) {
-                const searchMatch = body.match(/<search>\n?([\s\S]*?)\n?<\/search>/i);
-                const replaceMatch = body.match(/<replace>\n?([\s\S]*?)\n?<\/replace>/i);
-                if (!searchMatch || !replaceMatch) return '';
+                text = text.replace(/<ai_edit_file\s+filename="([^"]*)"[^>]*>([\s\S]*?)<\/ai_edit_file>/gi, function(match, filename, body) {
+                    const searchMatch = body.match(/<search>\n?([\s\S]*?)\n?<\/search>/i);
+                    const replaceMatch = body.match(/<replace>\n?([\s\S]*?)\n?<\/replace>/i);
+                    if (!searchMatch || !replaceMatch) return '';
 
-                if (!editGroups[filename]) {
-                    editGroups[filename] = [];
-                    groupOrder.push(filename);
-                }
-                editGroups[filename].push({ search: searchMatch[1], replace: replaceMatch[1] });
+                    if (!editGroups[filename]) {
+                        editGroups[filename] = [];
+                        groupOrder.push(filename);
+                    }
+                    editGroups[filename].push({ search: searchMatch[1], replace: replaceMatch[1] });
 
-                if (!placeholders[filename]) {
-                    const token = '\u0000EDITGROUP_' + Math.random().toString(36).substr(2, 9) + '\u0000';
-                    placeholders[filename] = token;
-                    return '\n\n' + token + '\n\n';
-                }
-                return ''; // 同一文件的后续标签：不再重复插入占位符，内容已并入分组
-            });
-
-            window.editCards = window.editCards || {};
-            window.rawCodeBlocks = window.rawCodeBlocks || {};
-            const esc = s => s.replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;');
-
-            groupOrder.forEach(filename => {
-                const edits = editGroups[filename];
-                const id = 'editgrp-' + Math.random().toString(36).substr(2, 9);
-                window.editCards[id] = { filename, edits };
-
-                let codeBlocksHTML = '';
-                let totalLines = 0;
-                edits.forEach((e, i) => {
-                    window.rawCodeBlocks[id + '-s' + i] = e.search;
-                    window.rawCodeBlocks[id + '-r' + i] = e.replace;
-                    totalLines += e.search.split('\n').length;
-                    const stepLabel = edits.length > 1 ? `第 ${i + 1}/${edits.length} 处 · ` : '';
-                    codeBlocksHTML += `<div class="edit-code-block"><div class="edit-code-label"><span>${stepLabel}原代码</span><button onclick="copyCode('${id}-s${i}')">复制</button></div><pre class="edit-code-pre"><code>${esc(e.search)}</code></pre></div>`;
-                    codeBlocksHTML += `<div class="edit-code-block"><div class="edit-code-label"><span>${stepLabel}新代码</span><button onclick="copyCode('${id}-r${i}')">复制</button></div><pre class="edit-code-pre"><code>${esc(e.replace)}</code></pre></div>`;
+                    if (!placeholders[filename]) {
+                        const token = '\u0000EDITGROUP_' + Math.random().toString(36).substr(2, 9) + '\u0000';
+                        placeholders[filename] = token;
+                        return '\n\n' + token + '\n\n';
+                    }
+                    return ''; // 同一文件的后续标签：不再重复插入占位符，内容已并入分组
                 });
 
-                const metaText = edits.length > 1 ? `代码修改 · 共 ${edits.length} 处 · ${totalLines} 行` : `代码修改 · ${totalLines} 行`;
-                const safeFilename = esc(filename);
+                window.editCards = window.editCards || {};
+                window.rawCodeBlocks = window.rawCodeBlocks || {};
+                const esc = s => s.replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;');
 
-                const cardHTML = `<div class="edit-card" id="${id}">
-                    <div class="edit-card-header"><div class="edit-card-icon">✏️</div><div class="edit-card-info"><div class="edit-card-title">${safeFilename}</div><div class="edit-card-meta">${metaText}</div></div><span class="edit-card-status" id="${id}-status"></span></div>
-                    <div class="edit-card-actions" id="${id}-actions">
-                        <button class="edit-apply-btn" onclick="applyEdit('${id}')">应用修改</button>
-                        <button class="edit-view-btn" onclick="toggleEditView('${id}')" id="${id}-viewbtn">查看代码</button>
-                    </div>
-                    <div class="edit-card-code" id="${id}-code">${codeBlocksHTML}</div>
-                </div>`;
+                groupOrder.forEach(filename => {
+                    const edits = editGroups[filename];
+                    const id = 'editgrp-' + Math.random().toString(36).substr(2, 9);
+                    window.editCards[id] = { filename, edits };
 
-                text = text.replace(placeholders[filename], cardHTML);
-            });
+                    let codeBlocksHTML = '';
+                    let totalLines = 0;
+                    edits.forEach((e, i) => {
+                        window.rawCodeBlocks[id + '-s' + i] = e.search;
+                        window.rawCodeBlocks[id + '-r' + i] = e.replace;
+                        totalLines += e.search.split('\n').length;
+                        const stepLabel = edits.length > 1 ? `第 ${i + 1}/${edits.length} 处 · ` : '';
+                        codeBlocksHTML += `<div class="edit-code-block"><div class="edit-code-label"><span>${stepLabel}原代码</span><button onclick="copyCode('${id}-s${i}')">复制</button></div><pre class="edit-code-pre"><code>${esc(e.search)}</code></pre></div>`;
+                        codeBlocksHTML += `<div class="edit-code-block"><div class="edit-code-label"><span>${stepLabel}新代码</span><button onclick="copyCode('${id}-r${i}')">复制</button></div><pre class="edit-code-pre"><code>${esc(e.replace)}</code></pre></div>`;
+                    });
+
+                    const metaText = edits.length > 1 ? `代码修改 · 共 ${edits.length} 处 · ${totalLines} 行` : `代码修改 · ${totalLines} 行`;
+                    const safeFilename = esc(filename);
+
+                    const cardHTML = `<div class="edit-card" id="${id}">
+                        <div class="edit-card-header"><div class="edit-card-icon">✏️</div><div class="edit-card-info"><div class="edit-card-title">${safeFilename}</div><div class="edit-card-meta">${metaText}</div></div><span class="edit-card-status" id="${id}-status"></span></div>
+                        <div class="edit-card-actions" id="${id}-actions">
+                            <button class="edit-apply-btn" onclick="applyEdit('${id}')">应用修改</button>
+                            <button class="edit-view-btn" onclick="toggleEditView('${id}')" id="${id}-viewbtn">查看代码</button>
+                        </div>
+                        <div class="edit-card-code" id="${id}-code">${codeBlocksHTML}</div>
+                    </div>`;
+
+                    text = text.replace(placeholders[filename], cardHTML);
+                });
+            } catch (e) {
+                console.warn('ai_edit_file 卡片解析出错（已跳过，不影响其余内容显示）:', e);
+            }
 
             // 匹配 <file_write file="xxx.html" ...>...</file_write> 格式
             text = text.replace(/<file_write\s+file="([^"]*\.html)"[^>]*>([\s\S]*?)<\/file_write>/gi, function(match, filename, code) {
@@ -500,30 +505,45 @@
                     if (!pendingRender) {
                         pendingRender = true;
                         requestAnimationFrame(() => {
-                            mdContainer.innerHTML = marked.parse(preprocessMarkdown(currentText));
-                            
-                            // 实时同步预览：检测流式生成的 HTML 代码块
-                            const match = currentText.match(/```html\s*([\s\S]*?)$/);
-                            if (match) {
-                                const codeContent = match[1];
-                                window.rawCodeBlocks = window.rawCodeBlocks || {};
-                                window.rawCodeBlocks[streamArtifactId] = codeContent;
-                                
-                                // 如果预览窗口已打开且正在预览此生成块，则刷新
-                                if (!document.getElementById('html-preview-modal').classList.contains('hidden') && 
-                                    window._currentHtmlArtifactId === streamArtifactId) {
-                                    updateHtmlPreviewContent(streamArtifactId);
+                            try {
+                                mdContainer.innerHTML = marked.parse(preprocessMarkdown(currentText));
+
+                                // 实时同步预览：检测流式生成的 HTML 代码块
+                                const match = currentText.match(/```html\s*([\s\S]*?)$/);
+                                if (match) {
+                                    const codeContent = match[1];
+                                    window.rawCodeBlocks = window.rawCodeBlocks || {};
+                                    window.rawCodeBlocks[streamArtifactId] = codeContent;
+
+                                    // 如果预览窗口已打开且正在预览此生成块，则刷新
+                                    if (!document.getElementById('html-preview-modal').classList.contains('hidden') &&
+                                        window._currentHtmlArtifactId === streamArtifactId) {
+                                        updateHtmlPreviewContent(streamArtifactId);
+                                    }
                                 }
+
+                                const chatWin = document.getElementById('chat-window');
+                                chatWin.scrollTop = chatWin.scrollHeight;
+                            } catch (renderErr) {
+                                // 渲染中途出错也不能让页面卡死：先用纯文本兜底显示，下一帧继续尝试
+                                console.warn('流式渲染出错（已自动恢复，不影响后续生成）:', renderErr);
+                                try {
+                                    mdContainer.innerText = currentText;
+                                } catch (e2) { /* 忽略 */ }
+                            } finally {
+                                // 无论成功或失败，都必须重置，否则后续所有更新都会被永久卡住
+                                pendingRender = false;
                             }
-                            
-                            pendingRender = false;
-                            const chatWin = document.getElementById('chat-window');
-                            chatWin.scrollTop = chatWin.scrollHeight;
                         });
                     }
                 },
                 finalize(text) {
-                    mdContainer.innerHTML = marked.parse(preprocessMarkdown(text));
+                    try {
+                        mdContainer.innerHTML = marked.parse(preprocessMarkdown(text));
+                    } catch (renderErr) {
+                        console.warn('最终渲染出错，已降级为纯文本显示:', renderErr);
+                        mdContainer.innerText = text;
+                    }
                     if (bubble) bubble.classList.remove('streaming');
                 }
             };
