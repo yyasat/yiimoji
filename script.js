@@ -60,7 +60,20 @@
         const DEFAULT_SYSTEM_PROMPT = '请始终使用中文回复用户。无论用户使用什么语言提问，你的回答都应该使用简体中文，除非用户明确要求使用其他语言。代码、专有名词、技术术语可以保留英文原文。\n\n当需要修改用户上传的代码文件（如 .js / .css / .html 等）时，必须使用以下 XML 格式输出修改内容，而不是直接输出完整文件：\n<ai_edit_file filename="文件名">\n<search>\n需要被替换的原始代码（必须与原文件逐字逐空格完全一致，包括缩进和换行）\n</search>\n<replace>\n替换后的新代码\n</replace>\n</ai_edit_file>\n如需多处修改，依次输出多个此标签。只有在用户明确要求输出完整文件时，才直接输出整个文件。';
 
         // 文件内容存储：{ 文件名 → 内容 }，用于验证 ai_edit_file 的搜索匹配
-        window.fileStore = window.fileStore || {};
+        // 持久化到 localStorage，刷新页面/重新打开 APP 后依然保留，无需重复上传
+        const FILESTORE_KEY = 'studioAI_fileStore';
+        try {
+            window.fileStore = JSON.parse(localStorage.getItem(FILESTORE_KEY) || '{}');
+        } catch (e) {
+            window.fileStore = {};
+        }
+        function saveFileStore() {
+            try {
+                localStorage.setItem(FILESTORE_KEY, JSON.stringify(window.fileStore));
+            } catch (e) {
+                console.warn('fileStore 保存失败（可能超出容量）:', e);
+            }
+        }
 
         // 代码渲染器
         const renderer = new marked.Renderer();
@@ -125,24 +138,69 @@
         function preprocessMarkdown(text) {
             if (!text) return text;
 
-            // 解析 <ai_edit_file> 标签，渲染为可操作的修改卡片
+            // 解析 <ai_edit_file> 标签：按文件名分组，同一文件的多处修改合并为一张卡片
+            const editGroups = {};   // filename -> [{search, replace}, ...]
+            const groupOrder = [];   // 文件名出现顺序（去重）
+            const placeholders = {}; // filename -> 占位符 token（只在第一次出现处插入）
+
             text = text.replace(/<ai_edit_file\s+filename="([^"]*)"[^>]*>([\s\S]*?)<\/ai_edit_file>/gi, function(match, filename, body) {
                 const searchMatch = body.match(/<search>\n?([\s\S]*?)\n?<\/search>/i);
                 const replaceMatch = body.match(/<replace>\n?([\s\S]*?)\n?<\/replace>/i);
                 if (!searchMatch || !replaceMatch) return '';
-                const searchText = searchMatch[1];
-                const replaceText = replaceMatch[1];
-                const id = 'edit-' + Math.random().toString(36).substr(2, 9);
-                window.editCards = window.editCards || {};
-                window.editCards[id] = { filename, search: searchText, replace: replaceText };
-                const lineCount = searchText.split('\n').length;
-                const safeFilename = filename.replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;');
-                return `\n\n<div class="edit-card" id="${id}"><div class="edit-card-header"><div class="edit-card-icon">✏️</div><div class="edit-card-info"><div class="edit-card-title">${safeFilename}</div><div class="edit-card-meta">代码修改 · ${lineCount} 行</div></div><span class="edit-card-status" id="${id}-status"></span></div><div class="edit-card-actions" id="${id}-actions"><button class="edit-apply-btn" onclick="applyEdit('${id}')">应用修改</button></div></div>\n\n`;
+
+                if (!editGroups[filename]) {
+                    editGroups[filename] = [];
+                    groupOrder.push(filename);
+                }
+                editGroups[filename].push({ search: searchMatch[1], replace: replaceMatch[1] });
+
+                if (!placeholders[filename]) {
+                    const token = '\u0000EDITGROUP_' + Math.random().toString(36).substr(2, 9) + '\u0000';
+                    placeholders[filename] = token;
+                    return '\n\n' + token + '\n\n';
+                }
+                return ''; // 同一文件的后续标签：不再重复插入占位符，内容已并入分组
+            });
+
+            window.editCards = window.editCards || {};
+            window.rawCodeBlocks = window.rawCodeBlocks || {};
+            const esc = s => s.replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;');
+
+            groupOrder.forEach(filename => {
+                const edits = editGroups[filename];
+                const id = 'editgrp-' + Math.random().toString(36).substr(2, 9);
+                window.editCards[id] = { filename, edits };
+
+                let codeBlocksHTML = '';
+                let totalLines = 0;
+                edits.forEach((e, i) => {
+                    window.rawCodeBlocks[id + '-s' + i] = e.search;
+                    window.rawCodeBlocks[id + '-r' + i] = e.replace;
+                    totalLines += e.search.split('\n').length;
+                    const stepLabel = edits.length > 1 ? `第 ${i + 1}/${edits.length} 处 · ` : '';
+                    codeBlocksHTML += `<div class="edit-code-block"><div class="edit-code-label"><span>${stepLabel}原代码</span><button onclick="copyCode('${id}-s${i}')">复制</button></div><pre class="edit-code-pre"><code>${esc(e.search)}</code></pre></div>`;
+                    codeBlocksHTML += `<div class="edit-code-block"><div class="edit-code-label"><span>${stepLabel}新代码</span><button onclick="copyCode('${id}-r${i}')">复制</button></div><pre class="edit-code-pre"><code>${esc(e.replace)}</code></pre></div>`;
+                });
+
+                const metaText = edits.length > 1 ? `代码修改 · 共 ${edits.length} 处 · ${totalLines} 行` : `代码修改 · ${totalLines} 行`;
+                const safeFilename = esc(filename);
+
+                const cardHTML = `<div class="edit-card" id="${id}">
+                    <div class="edit-card-header"><div class="edit-card-icon">✏️</div><div class="edit-card-info"><div class="edit-card-title">${safeFilename}</div><div class="edit-card-meta">${metaText}</div></div><span class="edit-card-status" id="${id}-status"></span></div>
+                    <div class="edit-card-actions" id="${id}-actions">
+                        <button class="edit-apply-btn" onclick="applyEdit('${id}')">应用修改</button>
+                        <button class="edit-view-btn" onclick="toggleEditView('${id}')" id="${id}-viewbtn">查看代码</button>
+                    </div>
+                    <div class="edit-card-code" id="${id}-code">${codeBlocksHTML}</div>
+                </div>`;
+
+                text = text.replace(placeholders[filename], cardHTML);
             });
 
             // 匹配 <file_write file="xxx.html" ...>...</file_write> 格式
             text = text.replace(/<file_write\s+file="([^"]*\.html)"[^>]*>([\s\S]*?)<\/file_write>/gi, function(match, filename, code) {
                 window.fileStore[filename] = code.trim();
+                saveFileStore();
                 return '\n```html\n' + code.trim() + '\n```\n';
             });
             // 匹配其他扩展名的 file_write
@@ -150,6 +208,7 @@
                 const langMap = { js: 'javascript', ts: 'typescript', py: 'python', css: 'css', json: 'json', md: 'markdown', java: 'java', cpp: 'cpp', c: 'c', go: 'go', rs: 'rust', rb: 'ruby', sh: 'bash', xml: 'xml', sql: 'sql' };
                 const lang = langMap[ext] || ext;
                 window.fileStore[filename] = code.trim();
+                saveFileStore();
                 return '\n```' + lang + '\n' + code.trim() + '\n```\n';
             });
             // 匹配未闭合的 <file_write ...> 标签（流式过程中还没收到 </file_write>）
@@ -501,6 +560,7 @@
                     attachments.filter(a => a.type === 'file').forEach(a => {
                         // 存入 fileStore，供 ai_edit_file 验证使用
                         window.fileStore[a.name] = a.data;
+                        saveFileStore();
                         finalContent += `\n\n--- 导入文件: ${a.name} ---\n\`\`\`\n${a.data}\n\`\`\``;
                     });
 
@@ -1126,42 +1186,57 @@
         function applyEdit(id) {
             const edit = (window.editCards || {})[id];
             if (!edit) { alert('修改数据丢失，请重新生成。'); return; }
+            const { filename, edits } = edit;
 
-            const content = (window.fileStore || {})[edit.filename];
+            const content = (window.fileStore || {})[filename];
             if (content === undefined) {
-                _setEditStatus(id, 'fail', `未找到文件 "${edit.filename}"，请先上传该文件`);
+                _setEditStatus(id, 'fail', `未找到文件 "${filename}"，请先上传该文件`);
                 return;
             }
-            if (!content.includes(edit.search)) {
-                _setEditStatus(id, 'mismatch', null);
-                return;
+
+            // 依次模拟应用每一处修改：全部能匹配上才正式写入，避免只改一半
+            let working = content;
+            for (let i = 0; i < edits.length; i++) {
+                if (!working.includes(edits[i].search)) {
+                    _setEditStatus(id, 'mismatch', null, i + 1, edits.length);
+                    return;
+                }
+                working = working.replace(edits[i].search, edits[i].replace);
             }
-            // 应用修改
-            const newContent = content.replace(edit.search, edit.replace);
-            window.fileStore[edit.filename] = newContent;
-            const blob = new Blob([newContent], { type: 'text/plain;charset=utf-8' });
+
+            // 全部验证通过，正式写入并下载
+            window.fileStore[filename] = working;
+            saveFileStore();
+            const blob = new Blob([working], { type: 'text/plain;charset=utf-8' });
             const url = URL.createObjectURL(blob);
             const a = document.createElement('a');
-            a.href = url; a.download = edit.filename; a.click();
+            a.href = url; a.download = filename; a.click();
             URL.revokeObjectURL(url);
             _setEditStatus(id, 'success', null);
         }
 
-        function _setEditStatus(id, status, msg) {
+        // "查看代码"按钮永远保留在操作区，无论应用成功/失败，用户都能随时看到并复制原代码/新代码
+        function _viewBtnHTML(id) {
+            return `<button class="edit-view-btn" onclick="toggleEditView('${id}')" id="${id}-viewbtn">查看代码</button>`;
+        }
+
+        function _setEditStatus(id, status, msg, step, total) {
             const statusEl = document.getElementById(id + '-status');
             const actionsEl = document.getElementById(id + '-actions');
             if (status === 'success') {
                 if (statusEl) { statusEl.textContent = '✓ 已应用并下载'; statusEl.className = 'edit-card-status edit-status-ok'; }
-                if (actionsEl) actionsEl.innerHTML = '';
+                if (actionsEl) actionsEl.innerHTML = _viewBtnHTML(id);
             } else if (status === 'mismatch') {
-                if (statusEl) { statusEl.textContent = '✗ 原文不匹配'; statusEl.className = 'edit-card-status edit-status-fail'; }
+                const stepText = (step && total) ? `第 ${step}/${total} 处` : '';
+                if (statusEl) { statusEl.textContent = `✗ ${stepText}原文不匹配`; statusEl.className = 'edit-card-status edit-status-fail'; }
                 if (actionsEl) actionsEl.innerHTML = `
                     <span class="edit-retry-hint">是否重新生成？</span>
                     <button class="edit-retry-btn" onclick="editRetry('${id}')">重新生成</button>
-                    <button class="edit-dismiss-btn" onclick="editDismiss('${id}')">不需要</button>`;
+                    <button class="edit-dismiss-btn" onclick="editDismiss('${id}')">不需要</button>
+                    ${_viewBtnHTML(id)}`;
             } else if (status === 'fail') {
                 if (statusEl) { statusEl.textContent = msg || '失败'; statusEl.className = 'edit-card-status edit-status-fail'; }
-                if (actionsEl) actionsEl.innerHTML = `<button class="edit-dismiss-btn" onclick="editDismiss('${id}')">知道了</button>`;
+                if (actionsEl) actionsEl.innerHTML = `<button class="edit-dismiss-btn" onclick="editDismiss('${id}')">知道了</button>${_viewBtnHTML(id)}`;
             }
         }
 
@@ -1170,14 +1245,23 @@
             editDismiss(id);
             if (!edit) return;
             const input = document.getElementById('user-input');
-            input.value = `你上次给出的针对 "${edit.filename}" 的修改验证失败，原因是 <search> 里的文本在文件中找不到完全一致的内容（可能是空格或缩进有出入）。请重新查看我发给你的原始文件内容，确保 <search> 部分与原文件逐字逐空格完全一致后，重新输出 <ai_edit_file> 修改。`;
+            input.value = `你上次给出的针对 "${edit.filename}" 的修改验证失败，原因是其中某一处 <search> 内容在文件中找不到完全一致的匹配（可能是空格或缩进有出入）。请重新查看我发给你的原始文件内容，确保每一处 <search> 都与原文件逐字逐空格完全一致后，重新输出 <ai_edit_file> 修改。`;
             input.focus();
             autoResize(input);
         }
 
         function editDismiss(id) {
             const actionsEl = document.getElementById(id + '-actions');
-            if (actionsEl) actionsEl.innerHTML = '<span style="font-size:11px;color:#9ca3af;padding:4px 0;display:block">已跳过</span>';
+            if (actionsEl) actionsEl.innerHTML = `<span style="font-size:11px;color:#9ca3af;padding:4px 0;display:inline-block">已跳过</span>${_viewBtnHTML(id)}`;
+        }
+
+        // 展开/收起"查看代码"区域（不影响应用修改的状态）
+        function toggleEditView(id) {
+            const codeEl = document.getElementById(id + '-code');
+            const btn = document.getElementById(id + '-viewbtn');
+            if (!codeEl) return;
+            const showing = codeEl.classList.toggle('show');
+            if (btn) btn.textContent = showing ? '收起代码' : '查看代码';
         }
         function autoResize(el) { el.style.height = 'auto'; el.style.height = el.scrollHeight + 'px'; }
         function stopGeneration() { if (currentAbortController) currentAbortController.abort(); isGenerating = false; toggleInputState(false); }
