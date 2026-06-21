@@ -1,4 +1,4 @@
-// 使用 IndexedDB 实现无限制存储
+        // 使用 IndexedDB 实现无限制存储
         const db = {
             name: 'StudioAI_DB',
             store: 'chat_sessions',
@@ -57,23 +57,7 @@
         let currentAbortController = null;
         let pendingAttachments = [];
 
-        const DEFAULT_SYSTEM_PROMPT = '请始终使用中文回复用户。无论用户使用什么语言提问，你的回答都应该使用简体中文，除非用户明确要求使用其他语言。代码、专有名词、技术术语可以保留英文原文。\n\n当需要修改用户上传的代码文件（如 .js / .css / .html 等）时，必须使用以下 XML 格式输出修改内容，而不是直接输出完整文件：\n<ai_edit_file filename="文件名">\n<search>\n需要被替换的原始代码（必须与原文件逐字逐空格完全一致，包括缩进和换行）\n</search>\n<replace>\n替换后的新代码\n</replace>\n</ai_edit_file>\n如需多处修改，依次输出多个此标签。只有在用户明确要求输出完整文件时，才直接输出整个文件。';
-
-        // 文件内容存储：{ 文件名 → 内容 }，用于验证 ai_edit_file 的搜索匹配
-        // 持久化到 localStorage，刷新页面/重新打开 APP 后依然保留，无需重复上传
-        const FILESTORE_KEY = 'studioAI_fileStore';
-        try {
-            window.fileStore = JSON.parse(localStorage.getItem(FILESTORE_KEY) || '{}');
-        } catch (e) {
-            window.fileStore = {};
-        }
-        function saveFileStore() {
-            try {
-                localStorage.setItem(FILESTORE_KEY, JSON.stringify(window.fileStore));
-            } catch (e) {
-                console.warn('fileStore 保存失败（可能超出容量）:', e);
-            }
-        }
+        const DEFAULT_SYSTEM_PROMPT = '请始终使用中文回复用户。无论用户使用什么语言提问，你的回答都应该使用简体中文，除非用户明确要求使用其他语言。代码、专有名词、技术术语可以保留英文原文。';
 
         // 代码渲染器
         const renderer = new marked.Renderer();
@@ -137,92 +121,14 @@
         // 预处理函数：将 AI 输出的 XML 标签格式代码转换为标准 markdown 代码块
         function preprocessMarkdown(text) {
             if (!text) return text;
-
-            // 【新增】：重置卡片缓存，防止内存污染
-            window.editCardHTMLs = {};
-
-            // 解析 <ai_edit_file> 标签：按文件名分组，同一文件的多处修改合并为一张卡片
-            // 整体包一层 try/catch：万一这部分解析出错，也不能影响后面正文/代码块正常显示
-            try {
-                const editGroups = {};   // filename -> [{search, replace}, ...]
-                const groupOrder = [];   // 文件名出现顺序（去重）
-                const placeholders = {}; // filename -> 占位符 token（只在第一次出现处插入）
-
-                text = text.replace(/<ai_edit_file\s+filename="([^"]*)"[^>]*>([\s\S]*?)<\/ai_edit_file>/gi, function(match, filename, body) {
-                    const searchMatch = body.match(/<search>\n?([\s\S]*?)\n?<\/search>/i);
-                    const replaceMatch = body.match(/<replace>\n?([\s\S]*?)\n?<\/replace>/i);
-                    if (!searchMatch || !replaceMatch) return '';
-
-                    if (!editGroups[filename]) {
-                        editGroups[filename] = [];
-                        groupOrder.push(filename);
-                    }
-                    editGroups[filename].push({ search: searchMatch[1], replace: replaceMatch[1] });
-
-                    if (!placeholders[filename]) {
-                        const token = '\u0000EDITGROUP_' + Math.random().toString(36).substr(2, 9) + '\u0000';
-                        placeholders[filename] = token;
-                        return '\n\n' + token + '\n\n';
-                    }
-                    return ''; // 同一文件的后续标签：不再重复插入占位符，内容已并入分组
-                });
-
-                window.editCards = window.editCards || {};
-                window.rawCodeBlocks = window.rawCodeBlocks || {};
-                const esc = s => s.replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;');
-
-                groupOrder.forEach(filename => {
-                    const edits = editGroups[filename];
-                    const id = 'editgrp-' + Math.random().toString(36).substr(2, 9);
-                    window.editCards[id] = { filename, edits };
-
-                    let codeBlocksHTML = '';
-                    let totalLines = 0;
-                    edits.forEach((e, i) => {
-                        // 【核心修复 1】：剥离 AI 错误输出在内部的 ```css 这种 Markdown 围栏标记
-                        let sText = e.search.replace(/^\s*```[a-zA-Z0-9_+-]*\s*\n?/g, '').replace(/\n?\s*```\s*$/g, '');
-                        let rText = e.replace(/^\s*```[a-zA-Z0-9_+-]*\s*\n?/g, '').replace(/\n?\s*```\s*$/g, '');
-
-                        window.rawCodeBlocks[id + '-s' + i] = sText;
-                        window.rawCodeBlocks[id + '-r' + i] = rText;
-                        totalLines += sText.split('\n').length;
-                        const stepLabel = edits.length > 1 ? `第 ${i + 1}/${edits.length} 处 · ` : '';
-                        codeBlocksHTML += `<div class="edit-code-block"><div class="edit-code-label"><span>${stepLabel}原代码</span><button onclick="copyCode('${id}-s${i}')">复制</button></div><pre class="edit-code-pre"><code>${esc(sText)}</code></pre></div>`;
-                        codeBlocksHTML += `<div class="edit-code-block"><div class="edit-code-label"><span>${stepLabel}新代码</span><button onclick="copyCode('${id}-r${i}')">复制</button></div><pre class="edit-code-pre"><code>${esc(rText)}</code></pre></div>`;
-                    });
-
-                    const metaText = edits.length > 1 ? `代码修改 · 共 ${edits.length} 处 · ${totalLines} 行` : `代码修改 · ${totalLines} 行`;
-                    const safeFilename = esc(filename);
-
-                    const cardHTML = `<div class="edit-card" id="${id}">
-                        <div class="edit-card-header"><div class="edit-card-icon">✏️</div><div class="edit-card-info"><div class="edit-card-title">${safeFilename}</div><div class="edit-card-meta">${metaText}</div></div><span class="edit-card-status" id="${id}-status"></span></div>
-                        <div class="edit-card-actions" id="${id}-actions">
-                            <button class="edit-apply-btn" onclick="applyEdit('${id}')">应用修改</button>
-                            <button class="edit-view-btn" onclick="toggleEditView('${id}')" id="${id}-viewbtn">查看代码</button>
-                        </div>
-                        <div class="edit-card-code" id="${id}-code">${codeBlocksHTML}</div>
-                    </div>`;
-
-                    // 【核心修复 2】：不要直接把 HTML 丢进 text，而是替换成一个安全的 div 占位符
-                    window.editCardHTMLs[id] = cardHTML;
-                    text = text.replace(placeholders[filename], `\n\n<div id="placeholder-${id}"></div>\n\n`);
-                });
-            } catch (e) {
-                console.warn('ai_edit_file 卡片解析出错（已跳过，不影响其余内容显示）:', e);
-            }
-
             // 匹配 <file_write file="xxx.html" ...>...</file_write> 格式
             text = text.replace(/<file_write\s+file="([^"]*\.html)"[^>]*>([\s\S]*?)<\/file_write>/gi, function(match, filename, code) {
-                window.fileStore[filename] = code.trim();
-                saveFileStore();
                 return '\n```html\n' + code.trim() + '\n```\n';
             });
             // 匹配其他扩展名的 file_write
             text = text.replace(/<file_write\s+file="([^"]*\.(\w+))"[^>]*>([\s\S]*?)<\/file_write>/gi, function(match, filename, ext, code) {
                 const langMap = { js: 'javascript', ts: 'typescript', py: 'python', css: 'css', json: 'json', md: 'markdown', java: 'java', cpp: 'cpp', c: 'c', go: 'go', rs: 'rust', rb: 'ruby', sh: 'bash', xml: 'xml', sql: 'sql' };
                 const lang = langMap[ext] || ext;
-                window.fileStore[filename] = code.trim();
-                saveFileStore();
                 return '\n```' + lang + '\n' + code.trim() + '\n```\n';
             });
             // 匹配未闭合的 <file_write ...> 标签（流式过程中还没收到 </file_write>）
@@ -235,20 +141,6 @@
             breaks: true,
             gfm: true
         });
-
-        // 【核心修复 3】：挂载拦截器，在 Markdown 彻底渲染完文本之后，再把刚才的占位符换回原生的 UI 卡片
-        // 这样可以 100% 避免普通代码块卡片在“应用修改”卡片内出现“套娃”
-        const _originalMarkedParse = marked.parse;
-        marked.parse = function(src, options) {
-            let html = _originalMarkedParse.call(marked, src, options);
-            if (window.editCardHTMLs) {
-                for (let id in window.editCardHTMLs) {
-                    const placeholderRegex = new RegExp(`<p>\\s*<div id="placeholder-${id}"><\\/div>\\s*<\\/p>|<div id="placeholder-${id}"><\\/div>`, 'g');
-                    html = html.replace(placeholderRegex, window.editCardHTMLs[id]);
-                }
-            }
-            return html;
-        };
 
         // 智能提取 HTML 卡片标题：title 标签 > h1 标签 > 当前对话标题 > 新文档
         function extractHtmlTitle(code) {
@@ -508,6 +400,27 @@
             }
         }
 
+        function toggleFold(btn) {
+            const limiter = btn.previousElementSibling;
+            if (limiter.classList.contains('collapsed')) {
+                limiter.classList.remove('collapsed');
+                limiter.style.maxHeight = limiter.scrollHeight + 'px';
+                btn.innerText = '收起 ∧';
+                setTimeout(() => {
+                    if (!limiter.classList.contains('collapsed')) {
+                        limiter.style.maxHeight = 'none';
+                    }
+                }, 400);
+            } else {
+                limiter.style.maxHeight = limiter.scrollHeight + 'px';
+                limiter.offsetHeight; 
+                limiter.classList.add('collapsed');
+                limiter.style.maxHeight = '';
+                btn.innerText = '展开全文 ∨';
+                limiter.scrollIntoView({ behavior: 'smooth', block: 'nearest' });
+            }
+        }
+
         function getThinkingHTML() {
             return `<div class="thinking-indicator">
                 <div class="thinking-dots"><span></span><span></span><span></span></div>
@@ -528,45 +441,30 @@
                     if (!pendingRender) {
                         pendingRender = true;
                         requestAnimationFrame(() => {
-                            try {
-                                mdContainer.innerHTML = marked.parse(preprocessMarkdown(currentText));
-
-                                // 实时同步预览：检测流式生成的 HTML 代码块
-                                const match = currentText.match(/```html\s*([\s\S]*?)$/);
-                                if (match) {
-                                    const codeContent = match[1];
-                                    window.rawCodeBlocks = window.rawCodeBlocks || {};
-                                    window.rawCodeBlocks[streamArtifactId] = codeContent;
-
-                                    // 如果预览窗口已打开且正在预览此生成块，则刷新
-                                    if (!document.getElementById('html-preview-modal').classList.contains('hidden') &&
-                                        window._currentHtmlArtifactId === streamArtifactId) {
-                                        updateHtmlPreviewContent(streamArtifactId);
-                                    }
+                            mdContainer.innerHTML = marked.parse(currentText);
+                            
+                            // 实时同步预览：检测流式生成的 HTML 代码块
+                            const match = currentText.match(/```html\s*([\s\S]*?)$/);
+                            if (match) {
+                                const codeContent = match[1];
+                                window.rawCodeBlocks = window.rawCodeBlocks || {};
+                                window.rawCodeBlocks[streamArtifactId] = codeContent;
+                                
+                                // 如果预览窗口已打开且正在预览此生成块，则刷新
+                                if (!document.getElementById('html-preview-modal').classList.contains('hidden') && 
+                                    window._currentHtmlArtifactId === streamArtifactId) {
+                                    updateHtmlPreviewContent(streamArtifactId);
                                 }
-
-                                const chatWin = document.getElementById('chat-window');
-                                chatWin.scrollTop = chatWin.scrollHeight;
-                            } catch (renderErr) {
-                                // 渲染中途出错也不能让页面卡死：先用纯文本兜底显示，下一帧继续尝试
-                                console.warn('流式渲染出错（已自动恢复，不影响后续生成）:', renderErr);
-                                try {
-                                    mdContainer.innerText = currentText;
-                                } catch (e2) { /* 忽略 */ }
-                            } finally {
-                                // 无论成功或失败，都必须重置，否则后续所有更新都会被永久卡住
-                                pendingRender = false;
                             }
+                            
+                            pendingRender = false;
+                            const chatWin = document.getElementById('chat-window');
+                            chatWin.scrollTop = chatWin.scrollHeight;
                         });
                     }
                 },
                 finalize(text) {
-                    try {
-                        mdContainer.innerHTML = marked.parse(preprocessMarkdown(text));
-                    } catch (renderErr) {
-                        console.warn('最终渲染出错，已降级为纯文本显示:', renderErr);
-                        mdContainer.innerText = text;
-                    }
+                    mdContainer.innerHTML = marked.parse(text);
                     if (bubble) bubble.classList.remove('streaming');
                 }
             };
@@ -601,9 +499,6 @@
                     
                     let finalContent = contentText;
                     attachments.filter(a => a.type === 'file').forEach(a => {
-                        // 存入 fileStore，供 ai_edit_file 验证使用
-                        window.fileStore[a.name] = a.data;
-                        saveFileStore();
                         finalContent += `\n\n--- 导入文件: ${a.name} ---\n\`\`\`\n${a.data}\n\`\`\``;
                     });
 
@@ -901,7 +796,7 @@
                     wrap.appendChild(attachRow);
                 }
 
-                bubble.innerHTML = marked.parse(preprocessMarkdown(content));
+                bubble.innerHTML = marked.parse(content);
                 bubble.onclick = () => { if(!isGenerating) editMessage(idx); };
 
                 if (msgObj.versions.length > 1) {
@@ -923,7 +818,11 @@
                 }
             } else {
                 bubble.innerHTML = `
-                    <div class="markdown-content"></div>
+                    <div class="content-limiter collapsed">
+                        <div class="markdown-content"></div>
+                        <div class="collapse-mask"></div>
+                    </div>
+                    <div class="toggle-fold-btn" onclick="toggleFold(this)">展开全文 ∨</div>
                     <div class="flex justify-end mt-2 pt-2 border-t border-gray-100 text-[10px] text-gray-400">
                         <button onclick="regenerateMessage(${idx}, event)" class="hover:text-black flex items-center gap-1 transition-colors">
                             <svg class="w-3.5 h-3.5" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><path d="M21.5 2v6h-6M21.34 15.57a10 10 0 1 1-.57-8.38l5.67-5.67"/></svg>
@@ -934,7 +833,28 @@
 
                 wrap.appendChild(bubble);
                 const mdContainer = bubble.querySelector('.markdown-content');
-                mdContainer.innerHTML = marked.parse(preprocessMarkdown(content));
+                mdContainer.innerHTML = marked.parse(content);
+
+                bubble.addEventListener('click', (e) => {
+                    if (e.detail === 3) {
+                        const limiter = bubble.querySelector('.content-limiter');
+                        if (limiter.classList.contains('collapsed')) {
+                            limiter.classList.remove('collapsed');
+                            limiter.style.maxHeight = 'none';
+                        } else {
+                            limiter.classList.add('collapsed');
+                            limiter.style.maxHeight = '400px';
+                        }
+                    }
+                });
+
+                setTimeout(() => {
+                    const limiter = bubble.querySelector('.content-limiter');
+                    const toggleBtn = bubble.querySelector('.toggle-fold-btn');
+                    if (limiter && limiter.scrollHeight > 400) {
+                        toggleBtn.classList.add('visible');
+                    }
+                }, 100);
             }
             win.appendChild(wrap);
             win.scrollTop = win.scrollHeight;
@@ -965,12 +885,13 @@
                 const raw = (data.choices?.[0]?.message?.content || '').trim().replace(/```json|```/g, '').trim();
                 const suggestions = JSON.parse(raw);
                 if (Array.isArray(suggestions) && suggestions.length > 0) {
+                    const limiter = bubble.querySelector('.content-limiter');
                     const chips = document.createElement('div');
                     chips.className = 'suggestion-chips';
                     chips.innerHTML = suggestions.map(s =>
                         `<button class="suggestion-chip" onclick="useSuggestion(this)">${s}</button>`
                     ).join('');
-                    bubble.appendChild(chips);
+                    limiter.appendChild(chips);
                 }
             } catch(e) { /* 静默失败 */ }
         }
@@ -1223,117 +1144,6 @@
                 content.classList.remove('expanded');
                 btn.textContent = '展开 ∨';
             }
-        }
-
-        // --- ai_edit_file 验证与应用 ---
-
-        // 把 search 文本转成"空白容错"的正则：内容必须一致，但空格/Tab/换行数量不要求完全相等
-        // 这样能解决 AI 复述代码时空格、缩进经常对不齐、但内容其实没错的"假性不匹配"
-        function _buildFuzzyMatcher(search) {
-            const escaped = search.replace(/[.*+?^${}()|[\]\\]/g, '\\$&'); // 转义正则特殊字符
-            const flexible = escaped.replace(/\s+/g, '\\s+'); // 任意连续空白 → 可伸缩匹配
-            try {
-                return new RegExp(flexible);
-            } catch (e) {
-                return null;
-            }
-        }
-
-        function applyEdit(id) {
-            const edit = (window.editCards || {})[id];
-            if (!edit) { alert('修改数据丢失，请重新生成。'); return; }
-            const { filename, edits } = edit;
-
-            const content = (window.fileStore || {})[filename];
-            if (content === undefined) {
-                _setEditStatus(id, 'fail', `未找到文件 "${filename}"，请先上传该文件`);
-                return;
-            }
-
-            // 依次模拟应用每一处修改：全部能匹配上才正式写入，避免只改一半
-            let working = content;
-            let usedFuzzy = false;
-            for (let i = 0; i < edits.length; i++) {
-                const search = edits[i].search;
-                const replace = edits[i].replace;
-
-                if (working.includes(search)) {
-                    // 精确匹配：直接替换（用函数形式返回，避免 replace 文本里万一含 $ 符号被误解析）
-                    working = working.replace(search, () => replace);
-                    continue;
-                }
-
-                // 精确匹配失败，尝试空白容错匹配
-                const regex = _buildFuzzyMatcher(search);
-                if (regex && regex.test(working)) {
-                    working = working.replace(regex, () => replace);
-                    usedFuzzy = true;
-                    continue;
-                }
-
-                // 两种方式都找不到，才算真正不匹配
-                _setEditStatus(id, 'mismatch', null, i + 1, edits.length);
-                return;
-            }
-
-            // 全部验证通过，正式写入并下载
-            window.fileStore[filename] = working;
-            saveFileStore();
-            const blob = new Blob([working], { type: 'text/plain;charset=utf-8' });
-            const url = URL.createObjectURL(blob);
-            const a = document.createElement('a');
-            a.href = url; a.download = filename; a.click();
-            URL.revokeObjectURL(url);
-            _setEditStatus(id, 'success', null, null, null, usedFuzzy);
-        }
-
-        // "查看代码"按钮永远保留在操作区，无论应用成功/失败，用户都能随时看到并复制原代码/新代码
-        function _viewBtnHTML(id) {
-            return `<button class="edit-view-btn" onclick="toggleEditView('${id}')" id="${id}-viewbtn">查看代码</button>`;
-        }
-
-        function _setEditStatus(id, status, msg, step, total, usedFuzzy) {
-            const statusEl = document.getElementById(id + '-status');
-            const actionsEl = document.getElementById(id + '-actions');
-            if (status === 'success') {
-                if (statusEl) { statusEl.textContent = usedFuzzy ? '✓ 已应用（智能匹配）' : '✓ 已应用并下载'; statusEl.className = 'edit-card-status edit-status-ok'; }
-                if (actionsEl) actionsEl.innerHTML = _viewBtnHTML(id);
-            } else if (status === 'mismatch') {
-                const stepText = (step && total) ? `第 ${step}/${total} 处` : '';
-                if (statusEl) { statusEl.textContent = `✗ ${stepText}原文不匹配`; statusEl.className = 'edit-card-status edit-status-fail'; }
-                if (actionsEl) actionsEl.innerHTML = `
-                    <span class="edit-retry-hint">是否重新生成？</span>
-                    <button class="edit-retry-btn" onclick="editRetry('${id}')">重新生成</button>
-                    <button class="edit-dismiss-btn" onclick="editDismiss('${id}')">不需要</button>
-                    ${_viewBtnHTML(id)}`;
-            } else if (status === 'fail') {
-                if (statusEl) { statusEl.textContent = msg || '失败'; statusEl.className = 'edit-card-status edit-status-fail'; }
-                if (actionsEl) actionsEl.innerHTML = `<button class="edit-dismiss-btn" onclick="editDismiss('${id}')">知道了</button>${_viewBtnHTML(id)}`;
-            }
-        }
-
-        function editRetry(id) {
-            const edit = (window.editCards || {})[id];
-            editDismiss(id);
-            if (!edit) return;
-            const input = document.getElementById('user-input');
-            input.value = `你上次给出的针对 "${edit.filename}" 的修改验证失败，原因是其中某一处 <search> 内容在文件中找不到完全一致的匹配（可能是空格或缩进有出入）。请重新查看我发给你的原始文件内容，确保每一处 <search> 都与原文件逐字逐空格完全一致后，重新输出 <ai_edit_file> 修改。`;
-            input.focus();
-            autoResize(input);
-        }
-
-        function editDismiss(id) {
-            const actionsEl = document.getElementById(id + '-actions');
-            if (actionsEl) actionsEl.innerHTML = `<span style="font-size:11px;color:#9ca3af;padding:4px 0;display:inline-block">已跳过</span>${_viewBtnHTML(id)}`;
-        }
-
-        // 展开/收起"查看代码"区域（不影响应用修改的状态）
-        function toggleEditView(id) {
-            const codeEl = document.getElementById(id + '-code');
-            const btn = document.getElementById(id + '-viewbtn');
-            if (!codeEl) return;
-            const showing = codeEl.classList.toggle('show');
-            if (btn) btn.textContent = showing ? '收起代码' : '查看代码';
         }
         function autoResize(el) { el.style.height = 'auto'; el.style.height = el.scrollHeight + 'px'; }
         function stopGeneration() { if (currentAbortController) currentAbortController.abort(); isGenerating = false; toggleInputState(false); }
